@@ -32,7 +32,7 @@ abbrev arklibOnlyLinters : Array LeanOption := #[
   ⟨`linter.refine, true⟩,
   ⟨`linter.style.cdot, true⟩,
   ⟨`linter.style.dollarSyntax, true⟩,
-  ⟨`linter.style.lambdaSyntax, true⟩,
+  ⟨`linter.style.lambdaSyntax, false⟩,
   ⟨`linter.style.longLine, true⟩,
   ⟨`linter.style.longFile, .ofNat 1500⟩,
   ⟨`linter.style.missingEnd, true⟩,
