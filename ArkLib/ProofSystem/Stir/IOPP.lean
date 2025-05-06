@@ -31,27 +31,47 @@ structure IOPP
   /-- The underlying interactive-oracle proof-/
   iop : OracleProof pSpec oSpec StmtIn WitIn OStmtOut
 
-  /--necessary parameters to state the completeness property-/
-  relIn  : StmtIn  → WitIn → Prop
-  relOut : Bool → Unit → Prop
-  reduction : Reduction pSpec oSpec StmtIn WitIn Bool Unit
+  /-- The input relation on the input statement, the input oracle statement(s), and the input
+    witness -/
+  oRelIn : StmtIn × (∀ i, OStmtOut i) → WitIn → Prop
 
-  ioppCompleteness : perfectCompleteness relIn relOut reduction
+  /-- The output relation on the boolean output (accept/reject), the empty output oracle statement,
+    and the trivial output witness -/
+  oRelOut : Bool × (∀ _ : Empty, Unit) → Unit → Prop
 
-  /--necessary parameters to state the soundness property-/
-  langIn : Set StmtIn
-  langOut : Set Bool
-  verifier : Verifier pSpec oSpec StmtIn Bool
+  /-- The IOPP satisfies perfect completeness -/
+  ioppCompleteness : iop.perfectCompleteness oRelIn oRelOut
 
-  /--**One-shot soundness**-/
-  ioppSoundness : soundness langIn langOut verifier ε_sound
+  /-- The state function for the IOPP, define with regards to the languages of the input and output
+    relations, and the IOPP's verifier (seen as a regular verifier) -/
+  stateFn : StateFunction oRelIn.language oRelOut.language iop.verifier.toVerifier
 
-  /-- A *state function* used for round-by-round soundness. -/
-  stateFn :
-    StateFunction langIn langOut verifier
+  /-- The IOPP satisfies round-by-round soundness with respect to the state function and to the
+    constant rbr knowledge error `ε_sound` -/
+  ioppRBRKnowledgeSoundness : OracleReduction.rbrKnowledgeSoundness
+    oRelIn oRelOut iop.verifier stateFn (fun _ => ε_sound)
 
-  /--**round-by-round soundness** -/
-  ioppRBRSoundness : rbrSoundness langIn langOut verifier stateFn ε_rbr
+  -- /--necessary parameters to state the completeness property-/
+  -- relIn  : StmtIn  → WitIn → Prop
+  -- relOut : Bool → Unit → Prop
+  -- reduction : Reduction pSpec oSpec StmtIn WitIn Bool Unit
+
+  -- ioppCompleteness : perfectCompleteness relIn relOut reduction
+
+  -- /--necessary parameters to state the soundness property-/
+  -- langIn : Set StmtIn
+  -- langOut : Set Bool
+  -- verifier : Verifier pSpec oSpec StmtIn Bool
+
+  -- /--**One-shot soundness**-/
+  -- ioppSoundness : soundness langIn langOut verifier ε_sound
+
+  -- /-- A *state function* used for round-by-round soundness. -/
+  -- stateFn :
+  --   StateFunction langIn langOut verifier
+
+  -- /--**round-by-round soundness** -/
+  -- ioppRBRSoundness : rbrSoundness langIn langOut verifier stateFn ε_rbr
 
 end IOPP
 end Reduction
