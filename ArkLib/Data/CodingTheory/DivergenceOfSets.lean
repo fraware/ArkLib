@@ -6,7 +6,7 @@ Authors: Katerina Hristova, František Silváši, Julian Sutherland
 
 import ArkLib.Data.CodingTheory.RelativeHammingDistance
 
-/-
+/-!
 Proved definiton for divergence of an arbitrary set `U` from an arbitrary set `V`.
 -/
 
