@@ -20,7 +20,7 @@ open Classical LinearCodes
 
 noncomputable section
 
-/-
+/-!
 Definition of a `κ`-interleaved code `IC` of a linear code `LC` over a semiring `F`.
 Definition of distances for interleaved codes and statement for the relation between the minimal
 distance of an interleaved code and its underlying linear code.
