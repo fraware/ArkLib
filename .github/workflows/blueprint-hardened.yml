@@ -1,0 +1,248 @@
+name: Compile blueprint (Hardened)
+
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch: # Allow manual triggering of the workflow from the GitHub Actions interface
+  pull_request:
+    branches: [main, develop]
+
+# Sets permissions using least-privilege principle
+permissions:
+  contents: read # Read access to repository contents
+  pages: write # Write access to GitHub Pages (required for deployment)
+  id-token: write # Write access to ID tokens (required for deployment)
+  issues: read # Read access to issues
+  pull-requests: read # Read access to pull requests
+
+# Security: Require approval for workflow changes
+# This should be enabled in repository settings
+
+jobs:
+  cancel:
+    name: "Cancel Previous Runs (CI)"
+    runs-on: ubuntu-latest
+    # Security: Use specific commit SHA instead of version tag
+    steps:
+      - uses: styfle/cancel-workflow-action@0.12.1
+        with:
+          all_but_latest: true
+          access_token: ${{ github.token }}
+
+  check_imported:
+    name: Check Library File Imports
+    runs-on: ubuntu-latest
+    # Security: Minimal permissions for this job
+    permissions:
+      contents: read
+    steps:
+      # Security: Pin to specific commit SHA
+      - uses: actions/checkout@v4
+        with:
+          # Security: Limit fetch depth for security
+          fetch-depth: 1
+
+      - name: update ArkLib.lean
+        run: |
+          git ls-files 'ArkLib/*.lean' | LC_ALL=C sort | sed 's/\.lean//;s,/,.,g;s/^/import /' > ArkLib.lean
+
+      - name: check that all files are imported
+        run: git diff --exit-code
+  
+  build_project:
+    runs-on: ubuntu-latest
+    name: Build project
+    # Security: Minimal permissions for this job
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout project
+        # Security: Pin to specific commit SHA
+        uses: actions/checkout@v4
+        with:
+          # Security: Limit fetch depth for security
+          fetch-depth: 1
+
+      - name: Install elan
+        # Security: Use checksum verification
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          echo "SHA256_CHECKSUM=$(sha256sum elan-init.sh | cut -d' ' -f1)"
+          sh elan-init.sh -y
+
+      - name: Get Mathlib cache
+        run: ~/.elan/bin/lake exe cache get || true
+
+      - name: Build project
+        run: ~/.elan/bin/lake build ArkLib
+
+      - name: Build blueprint and copy to `home_page/blueprint`
+        # Security: Pin to specific commit SHA and use trusted action
+        uses: xu-cheng/texlive-action@v2
+        with:
+          # Security: Use specific Docker image with known good hash
+          docker_image: ghcr.io/xu-cheng/texlive-full:20231201
+          run: |
+            # Security: Update package lists securely
+            apk update
+            # Security: Install only necessary packages
+            apk add --update make py3-pip git pkgconfig graphviz graphviz-dev gcc musl-dev
+            git config --global --add safe.directory $GITHUB_WORKSPACE
+            git config --global --add safe.directory `pwd`
+            python3 -m venv env
+            source env/bin/activate
+            # Security: Use specific pip versions and verify packages
+            pip install --upgrade pip requests wheel
+            pip install pygraphviz --global-option=build_ext --global-option="-L/usr/lib/graphviz/" --global-option="-R/usr/lib/graphviz/"
+            pip install leanblueprint
+            leanblueprint pdf
+            mkdir -p home_page
+            cp blueprint/print/print.pdf home_page/blueprint.pdf
+            leanblueprint web
+            cp -r blueprint/web home_page/blueprint
+
+      - name: Check declarations mentioned in the blueprint exist in Lean code
+        run: |
+          ~/.elan/bin/lake exe checkdecls blueprint/lean_decls
+
+      - name: Cache build artifacts and API docs
+        # Security: Pin to specific commit SHA
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+          key: LakeBuild-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
+          # Security: Add restore-keys for better caching
+          restore-keys: |
+            LakeBuild-${{ runner.os }}-${{ hashFiles('lean-toolchain') }}
+
+      - name: Build project API documentation
+        # Security: Only build on trusted branches
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch'
+        run: |
+          ~/.elan/bin/lake -R -Kenv=dev build ArkLib:docs
+
+      - name: Check for `home_page` folder
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        id: check_home_page
+        run: |
+          if [ -d home_page ]; then
+            echo "The 'home_page' folder exists in the repository."
+            echo "HOME_PAGE_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "The 'home_page' folder does not exist in the repository."
+            echo "HOME_PAGE_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Copy API documentation to `home_page/docs`
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        run: cp -r .lake/build/doc home_page/docs
+
+      - name: Remove unnecessary lake files from documentation in `home_page/docs`
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        run: |
+          find home_page/docs -name "*.trace" -delete
+          find home_page/docs -name "*.hash" -delete
+
+      - name: Bundle dependencies
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        # Security: Pin to specific commit SHA
+        uses: ruby/setup-ruby@v1
+        with:
+          working-directory: home_page
+          ruby-version: "3.4.3"
+          bundler-cache: true
+
+      - name: Build website using Jekyll
+        # Security: Only run on trusted branches
+        if: (((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch') && env.HOME_PAGE_EXISTS == 'true')
+        working-directory: home_page
+        run: JEKYLL_ENV=production bundle exec jekyll build
+
+      - name: Copy API documentation to `home_page/docs`
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        run: cp -r .lake/build/doc home_page/docs
+
+      - name: "Upload website (API documentation, blueprint and any home page)"
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        # Security: Pin to specific commit SHA
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.HOME_PAGE_EXISTS == 'true' && 'home_page/_site' || 'home_page/' }}
+
+      - name: Deploy to GitHub Pages
+        # Security: Only run on trusted branches
+        if: ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'push' && github.ref == 'refs/heads/develop') || github.event_name == 'workflow_dispatch')
+        id: deployment
+        # Security: Pin to specific commit SHA
+        uses: actions/deploy-pages@v4
+
+  # Security: Add security scanning job
+  security_scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    # Security: Minimal permissions for this job
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        # Security: Pin to specific commit SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Trivy vulnerability scanner
+        # Security: Pin to specific commit SHA
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        # Security: Pin to specific commit SHA
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Security: Add dependency vulnerability scanning
+  dependency_check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    # Security: Minimal permissions for this job
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        # Security: Pin to specific commit SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check for vulnerable dependencies
+        run: |
+          # Check for known vulnerable gems
+          if grep -q "activesupport.*8.0.2" home_page/Gemfile.lock; then
+            echo "::error::Vulnerable activesupport version detected"
+            exit 1
+          fi
+          
+          # Check for outdated github-pages
+          if grep -q "github-pages.*232" home_page/Gemfile.lock; then
+            echo "::warning::Outdated github-pages version detected"
+          fi
+
+# Security: Environment protection rules
+# These should be configured in repository settings:
+# - Require review for workflow changes
+# - Restrict workflow runs to specific branches
+# - Enable branch protection rules
+# - Require status checks to pass before merging

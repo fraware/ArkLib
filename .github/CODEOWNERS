@@ -1,0 +1,27 @@
+# Global code owners - all files require review from security lead
+* @fraware
+
+# Security-critical files - require immediate attention
+SECURITY.md @fraware
+.github/workflows/ @fraware
+.github/dependabot.yml @fraware
+BRANCH_PROTECTION_GUIDE.md @fraware
+
+# Lean code - cryptographic and formal verification
+ArkLib/ @fraware
+*.lean @fraware
+lakefile.lean @fraware
+lean-toolchain @fraware
+
+# Documentation and blueprints
+blueprint/ @fraware
+README.md @fraware
+ACTION_PLAN*.md @fraware
+RISK_REGISTER.md @fraware
+
+# Build and deployment scripts
+scripts/ @fraware
+lake-manifest.json @fraware
+
+# Website and documentation
+home_page/ @fraware

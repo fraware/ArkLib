@@ -1,7 +1,8 @@
 source "https://rubygems.org"
 
 # To upgrade, run `bundle update github-pages`.
-gem "github-pages", group: :jekyll_plugins
+# Security: Pin to latest stable version to avoid vulnerabilities
+gem "github-pages", "~> 232", group: :jekyll_plugins
 # If you have any plugins, put them here!
 group :jekyll_plugins do
   #gem "jekyll-feed", "~> 0.12"
@@ -23,3 +24,6 @@ gem "http_parser.rb", "~> 0.6.0", :platforms => [:jruby]
 
 # Used for locally serving the website.
 gem "webrick", "~> 1.8"
+
+# Security: Add explicit version constraints for security-critical gems
+gem "activesupport", "~> 7.1.0"  # Latest stable version compatible with github-pages 232
